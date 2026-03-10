@@ -7,6 +7,7 @@
     
     return (
       <div className="space-y-4">
+        {/* สรุปประจำเดือน */}
         <div className="bg-gradient-to-r from-[#dcf0d5] to-[#cbe6c1] p-4 rounded-3xl shadow-sm border border-[#b2d6a5]">
           <h3 className="font-bold text-[#4a6b41] text-sm mb-3">สรุปประจำเดือน</h3>
           <div className="space-y-2">
@@ -15,6 +16,8 @@
             <div className="flex justify-between bg-[#4a6b41] text-white p-3 rounded-xl mt-2 shadow-sm"><span className="text-sm font-bold">ยอดคงเหลือ</span><span className="text-lg font-bold">฿ {currentBalance.toLocaleString()}</span></div>
           </div>
         </div>
+
+        {/* ฟอร์มเพิ่มรายการ */}
         <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
           <h3 className="font-bold text-[#8b7355] text-sm mb-4">เพิ่มรายการ</h3>
           <div className="space-y-3">
@@ -25,16 +28,46 @@
             </div>
             <input type="text" placeholder="หมวดหมู่ เช่น อาหาร..." value={financeForm.category} onChange={e => setFinanceForm({...financeForm, category: e.target.value})} className="w-full bg-gray-50 p-2.5 rounded-xl text-sm outline-none" />
             <input type="number" placeholder="จำนวนเงิน" value={financeForm.amount} onChange={e => setFinanceForm({...financeForm, amount: e.target.value})} className="w-full bg-gray-50 p-2.5 rounded-xl text-sm outline-none" />
+            
             <button onClick={() => {
               if(financeForm.category && financeForm.amount) {
-                setData(prev => ({...prev, transactions: [{ id: Date.now().toString(), date: financeForm.date, type: financeForm.type, category: financeForm.category, amount: Number(financeForm.amount) }, ...prev.transactions]}));
+                const newTx = { 
+                  id: 'tx' + Date.now().toString(), 
+                  date: financeForm.date, 
+                  type: financeForm.type, 
+                  category: financeForm.category, 
+                  amount: Number(financeForm.amount),
+                  status: 'complete'
+                };
+
+                // อัปเดต UI ทันที
+                setData(prev => ({...prev, transactions: [newTx, ...prev.transactions]}));
+                // ส่งไปบันทึกลง Sheet
+                google.script.run.saveFinanceTxToSheet(newTx);
+                // เคลียร์ฟอร์ม
                 setFinanceForm({...financeForm, category: '', amount: ''});
               }
             }} className="w-full bg-[#8b7355] text-white font-bold py-3 rounded-xl shadow-md">บันทึกรายการ</button>
           </div>
         </div>
-        <div className="bg-white rounded-3xl shadow-sm p-4"><h3 className="font-bold text-gray-700 text-sm mb-2">รายการเดือนนี้</h3>
-          {currentMonthTx.map(tx => <div key={tx.id} className="flex justify-between border-b py-2 text-xs"><span className="text-gray-500">{tx.date.slice(5)} {tx.category}</span><span className={`font-bold ${tx.type === 'income' ? 'text-green-600' : 'text-red-500'}`}>{tx.type === 'income' ? '+' : '-'} {tx.amount.toLocaleString()}</span></div>)}
+
+       {/* แสดงรายการเดือนนี้ */}
+        <div className="bg-white rounded-3xl shadow-sm p-4">
+          <h3 className="font-bold text-gray-700 text-sm mb-2">รายการเดือนนี้</h3>
+          {currentMonthTx.map(tx => {
+            const dateParts = tx.date.split('-');
+            const displayDate = dateParts.length === 3 ? `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}` : tx.date;
+            
+            return (
+              <div key={tx.id} className="flex justify-between border-b py-2 text-xs">
+                <span className="text-gray-500">{displayDate} | {tx.category}</span>
+                <span className={`font-bold ${tx.type === 'income' ? 'text-green-600' : 'text-red-500'}`}>
+                  {tx.type === 'income' ? '+' : '-'} {tx.amount.toLocaleString()}
+                </span>
+              </div>
+            );
+          })}
+          {currentMonthTx.length === 0 && <p className="text-xs text-center text-gray-400 py-2">ยังไม่มีรายการในเดือนนี้</p>}
         </div>
       </div>
     );

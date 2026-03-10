@@ -89,34 +89,30 @@
       const [chartSelectedDate, setChartSelectedDate] = useState(todayStr);
       const [manageNewItem, setManageNewItem] = useState({ text: '', date: todayStr, start: '', end: '', type: 'todo' });
 
-      // === แก้ไขส่วนนี้: ดึงข้อมูลจาก Google Sheets แทน Mock Data ===
       useEffect(() => {
         google.script.run
           .withSuccessHandler((serverData) => {
-            // เมื่อดึงข้อมูลสำเร็จ ให้นำข้อมูลมาใส่ใน State และปิดหน้าต่างโหลด
             setData(serverData);
             setLoading(false);
           })
           .withFailureHandler((error) => {
-            console.error("เกิดข้อผิดพลาดในการดึงข้อมูล:", error);
-            alert("ไม่สามารถโหลดข้อมูลได้ กรุณารีเฟรชหน้าจอ");
+            console.error(error);
+            alert("ไม่สามารถโหลดข้อมูลได้");
             setLoading(false);
           })
-          .getInitialData(); // เรียกใช้ฟังก์ชันจาก Code.gs
+          .getInitialData(); 
       }, []);
-      // =======================================================
 
-      // แจ้งเตือน Mood Modal ตอน 4 ทุ่ม
       useEffect(() => {
         if(!data) return;
         const timer = setInterval(() => {
           const now = new Date();
-          if (now.getHours() >= 22 && !data.moodHistory[todayStr]) {
+          if (now.getHours() >= 22 && (!data.dailyLog || !data.dailyLog.mood)) {
             setShowMoodModal(true);
           }
         }, 60000);
         return () => clearInterval(timer);
-      }, [data, todayStr]);
+      }, [data]);
 
       if (loading) {
         return (
@@ -139,50 +135,57 @@
       const targetItems = data.finances.targetItems || [];
       const monthlyTarget = targetItems.reduce((sum, item) => sum + item.amount, 0);
 
+      // --- ฟังก์ชันเมื่อกดทำรายการเสร็จ ---
       const toggleTodo = (id, type) => {
         setData(prev => {
-          if (type === 'routines') {
-            const history = prev.routineHistory || {};
-            const todayCompleted = history[todayStr] || [];
-            return {
-              ...prev, 
-              routineHistory: { 
-                ...history, 
-                [todayStr]: todayCompleted.includes(id) ? todayCompleted.filter(rId => rId !== id) : [...todayCompleted, id] 
-              }
-            };
-          } else {
-            return {
-              ...prev, 
-              [type]: prev[type].map(item => item.id === id ? { ...item, completed: !item.completed } : item)
-            };
+          let nextState = { ...prev };
+          
+          if (type === 'todos') {
+            // อัปเดต UI ทันที
+            nextState.todos = prev.todos.map(item => item.id === id ? { ...item, completed: true } : item);
+            // ส่งไป Code.gs (ระบุ Type เป็น 'To-Do')
+            google.script.run.updateTodoStatusInSheet(id, 'To-Do', todayStr);
+          } 
+          else if (type === 'routines') {
+            // ส่งไป Code.gs (ระบุ Type เป็น 'Schedule')
+            google.script.run.updateTodoStatusInSheet(id, 'Schedule', todayStr);
           }
+          else if (type === 'goals') {
+             nextState.goals = prev.goals.map(item => item.id === id ? { ...item, completed: true } : item);
+             google.script.run.updateGoalStatusInSheet(id, true);
+          }
+
+          // ข้อ 1: เอา ID ของสิ่งที่ทำเสร็จ (ไม่ว่าจะเป็น Type ไหน) ไปใส่ใน DailyLogs เสมอ
+          let newCompleted = [...(nextState.dailyLog.completedIds || [])];
+          if (!newCompleted.includes(id)) {
+             newCompleted.push(id);
+          }
+          
+          nextState.dailyLog = { ...nextState.dailyLog, completedIds: newCompleted };
+          
+          // บันทึกลงชีต DailyLogs ทันที
+          google.script.run.saveDailyLogToSheet(nextState.dailyLog);
+
+          return nextState;
         });
       };
 
       const deleteItem = (id, type) => setData(prev => ({ ...prev, [type]: prev[type].filter(item => item.id !== id) }));
-      const handleSaveMood = (moodId) => { setData(prev => ({ ...prev, moodHistory: { ...prev.moodHistory, [todayStr]: moodId } })); setShowMoodModal(false); };
-
-      const handleToggleBreak = () => {
-        const timeStr = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+      
+      const handleSaveMood = (moodId) => { 
         setData(prev => {
-          const breaks = [...(prev.workTime.breaks || [])];
-          const lastBreak = breaks[breaks.length - 1];
-          if (lastBreak && !lastBreak.end) lastBreak.end = timeStr; else breaks.push({ start: timeStr, end: null });
-          return { ...prev, workTime: { ...prev.workTime, breaks } };
+          const nextState = { 
+             ...prev, moodHistory: { ...prev.moodHistory, [todayStr]: moodId }, dailyLog: { ...prev.dailyLog, mood: moodId } 
+          };
+          google.script.run.saveDailyLogToSheet(nextState.dailyLog); 
+          return nextState;
         });
-      };
-
-      const handleSaveWorkTime = () => {
-        const hours = window.calculateHours(data.workTime.in, data.workTime.out, data.workTime.breaks);
-        setData(prev => ({
-          ...prev, workHistory: { ...prev.workHistory, [todayStr]: hours }
-        }));
+        setShowMoodModal(false); 
       };
 
       const pageProps = {
         data, setData, todayStr, currentDate, daysLeft, currentMonthTx, totalIncome, totalExpense, currentBalance, targetItems, monthlyTarget,
-        toggleTodo, deleteItem, handleSaveWorkTime, handleToggleBreak, financeForm, setFinanceForm, targetItemForm, setTargetItemForm,
+        toggleTodo, deleteItem, financeForm, setFinanceForm, targetItemForm, setTargetItemForm,
         calDate, setCalDate, chartSelectedDate, setChartSelectedDate, manageNewItem, setManageNewItem, setConfirmTask
       };
 
