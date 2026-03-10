@@ -9,13 +9,12 @@
     const Icon = window.Icon;
     const { useState } = React;
 
-    // State สำหรับเก็บข้อความเป้าหมายใหม่ที่กำลังพิมพ์
     const [newGoalText, setNewGoalText] = useState('');
 
     return (
       <div className="space-y-6">
         
-        {/* 1. จัดการเป้าหมายการเงิน (เดิม) */}
+        {/* 1. จัดการเป้าหมายการเงิน (อัปเดต: บันทึกลงชีต Finance) */}
         <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
           <h2 className="font-bold text-[#8b7355] mb-3 text-sm">ตั้งค่าเป้าหมายการเงิน (ต่อเดือน)</h2>
           <div className="bg-[#e8f3eb] p-3 rounded-xl mb-4 border border-[#d1e6d6] flex justify-between items-center shadow-sm">
@@ -26,7 +25,15 @@
               <div key={item.id} className="flex justify-between items-center bg-gray-50 p-2 rounded-lg text-sm">
                 <span className="flex-1">{item.text}</span>
                 <span className="font-bold text-[#8b7355] mr-3">฿ {item.amount.toLocaleString()}</span>
-                <button onClick={() => setData(prev => ({...prev, finances: {...prev.finances, targetItems: prev.finances.targetItems.filter(i => i.id !== item.id)}}))} className="text-red-400">
+                <button 
+                  onClick={() => {
+                    // ลบจาก UI ทันที
+                    setData(prev => ({...prev, finances: {...prev.finances, targetItems: prev.finances.targetItems.filter(i => i.id !== item.id)}}));
+                    // ส่งคำสั่งไปลบใน Sheet
+                    google.script.run.deleteFinanceFromSheet(item.id);
+                  }} 
+                  className="text-red-400 p-1.5 bg-red-50 rounded-md hover:bg-red-100 shrink-0"
+                >
                   <Icon name="delete" className="text-[16px]" />
                 </button>
               </div>
@@ -35,17 +42,128 @@
           <div className="flex gap-2">
             <input type="text" placeholder="ชื่อรายการ..." className="flex-1 bg-gray-50 rounded-xl p-2.5 text-xs outline-none" value={targetItemForm.text} onChange={e => setTargetItemForm({...targetItemForm, text: e.target.value})} />
             <input type="number" placeholder="ยอดเงิน" className="w-20 bg-gray-50 rounded-xl p-2.5 text-xs outline-none" value={targetItemForm.amount} onChange={e => setTargetItemForm({...targetItemForm, amount: e.target.value})} />
-            <button onClick={() => { if(targetItemForm.text && targetItemForm.amount) { setData(prev => ({...prev, finances: {...prev.finances, targetItems: [...(prev.finances.targetItems||[]), {id: Date.now().toString(), text: targetItemForm.text, amount: Number(targetItemForm.amount)}]}})); setTargetItemForm({text:'', amount:''}); } }} className="bg-[#8b7355] text-white rounded-xl px-3 py-2 text-xs font-bold"><Icon name="add" className="text-[16px]" /></button>
+            <button 
+              onClick={() => { 
+                if(targetItemForm.text && targetItemForm.amount) { 
+                  // สร้างรูปแบบวันที่ วว/ดด/ปปปป (เช่น 10/03/2026)
+                  const d = new Date();
+                  const dateStr = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+                  
+                  // สร้าง Object ข้อมูลใหม่
+                  const newFinanceItem = {
+                    id: 'f' + Date.now().toString(),
+                    date: dateStr,
+                    text: targetItemForm.text,
+                    category: 'FinancialTargets',
+                    amount: Number(targetItemForm.amount),
+                    status: 'pending'
+                  };
+
+                  // 1. อัปเดต UI ทันที
+                  setData(prev => ({
+                    ...prev, 
+                    finances: {
+                      ...prev.finances, 
+                      targetItems: [...(prev.finances.targetItems||[]), newFinanceItem]
+                    }
+                  })); 
+                  
+                  // 2. ส่งข้อมูลไป Google Sheet
+                  google.script.run.saveFinanceToSheet(newFinanceItem);
+
+                  // เคลียร์ฟอร์ม
+                  setTargetItemForm({text:'', amount:''}); 
+                } 
+              }} 
+              className="bg-[#8b7355] text-white rounded-xl px-3 py-2 text-xs font-bold shadow-sm active:scale-95 transition-transform"
+            >
+              <Icon name="add" className="text-[16px]" />
+            </button>
           </div>
         </div>
 
-        {/* 2. เพิ่มรายการ To-Do / Schedule (เดิม) */}
+        {/* 2. เพิ่มรายการ To-Do / Schedule (คงเดิมตามที่คุณอัปเดตแล้ว) */}
         <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
           <h2 className="font-bold text-[#8b7355] mb-4 text-sm">เพิ่มรายการ (To-Do / Schedule)</h2>
-          {/* ... (โค้ดส่วน To-Do คงเดิม) ... */}
+          <div className="flex gap-2 mb-3">
+            <button className={`flex-1 py-1.5 text-xs rounded-lg font-medium transition-colors ${manageNewItem.type === 'todo' ? 'bg-[#8b7355] text-white' : 'bg-gray-100 text-gray-500'}`} onClick={() => setManageNewItem({...manageNewItem, type: 'todo'})}>To-Do ทั่วไป</button>
+            <button className={`flex-1 py-1.5 text-xs rounded-lg font-medium transition-colors ${manageNewItem.type === 'routine' ? 'bg-[#8b7355] text-white' : 'bg-gray-100 text-gray-500'}`} onClick={() => setManageNewItem({...manageNewItem, type: 'routine'})}>Schedule (ทำทุกวัน)</button>
+          </div>
+          {manageNewItem.type === 'todo' && <input type="date" className="w-full bg-gray-50 rounded-xl p-3 text-sm mb-3 outline-none" value={manageNewItem.date} onChange={e => setManageNewItem({...manageNewItem, date: e.target.value})} />}
+          <input type="text" placeholder="ชื่อรายการ..." className="w-full bg-gray-50 rounded-xl p-3 text-sm mb-3 outline-none" value={manageNewItem.text} onChange={e => setManageNewItem({...manageNewItem, text: e.target.value})} />
+          <div className="flex gap-3 mb-3">
+            <div className="flex-1"><label className="text-[10px] text-gray-500 ml-1">เริ่ม</label><input type="time" className="w-full bg-gray-50 rounded-xl p-2 text-sm outline-none" value={manageNewItem.start} onChange={e => setManageNewItem({...manageNewItem, start: e.target.value})} /></div>
+            <div className="flex-1"><label className="text-[10px] text-gray-500 ml-1">สิ้นสุด</label><input type="time" className="w-full bg-gray-50 rounded-xl p-2 text-sm outline-none" value={manageNewItem.end} onChange={e => setManageNewItem({...manageNewItem, end: e.target.value})} /></div>
+          </div>
+          <button onClick={() => {
+            if(!manageNewItem.text) return;
+            const type = manageNewItem.type === 'routine' ? 'routines' : 'todos';
+            const newItem = { 
+              id: 't' + Date.now().toString(), 
+              text: manageNewItem.text, 
+              start: manageNewItem.start || '', 
+              end: manageNewItem.end || '' 
+            };
+            
+            if(type === 'todos') { 
+              newItem.date = manageNewItem.date; 
+              newItem.completed = false; 
+            } else {
+              newItem.date = ''; 
+              newItem.completed = false; 
+            }
+
+            setData(prev => ({...prev, [type]: [...prev[type], newItem]}));
+            google.script.run.saveTodoToSheet(newItem);
+            setManageNewItem({ text: '', date: todayStr, start: '', end: '', type: 'todo' });
+          }} className="w-full bg-[#8b7355] text-white rounded-xl p-3 text-sm font-bold shadow-md flex items-center justify-center"><Icon name="add" className="text-[18px] mr-1" /> เพิ่มลงรายการ</button>
         </div>
 
-        {/* 5. จัดการเป้าหมายรายปี (แก้ไขใหม่: บันทึกข้อมูลลง Sheet) */}
+        {/* 3. จัดการ Schedule (คงเดิม) */}
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+          <h2 className="font-bold text-[#8b7355] mb-3 text-sm">จัดการ Schedule (แสดงผลทุกวัน)</h2>
+          <div className="space-y-2">
+            {data.routines.map(item => (
+              <div key={item.id} className="flex justify-between items-center bg-[#faf8f5] border border-[#f0eadd] p-2 rounded-lg text-sm mb-2">
+                <div className="flex flex-col flex-1 truncate pr-2">
+                  <span className="text-[10px] font-bold text-[#8b7355]">{item.start ? `${item.start}${item.end ? ` - ${item.end}` : ''}` : 'ตลอดวัน'}</span>
+                  <span className="truncate text-[#5c4a44] font-medium">{item.text}</span>
+                </div>
+                <button onClick={() => {
+                    deleteItem(item.id, 'routines');
+                    google.script.run.deleteTodoFromSheet(item.id); 
+                  }} className="text-red-400 p-1.5 bg-red-50 rounded-md hover:bg-red-100 shrink-0">
+                  <Icon name="delete" className="text-[16px]" />
+                </button>
+              </div>
+            ))}
+            {data.routines.length === 0 && <p className="text-xs text-center text-gray-400 py-2">ไม่มีข้อมูล Schedule</p>}
+          </div>
+        </div>
+
+        {/* 4. จัดการ To-Do List (คงเดิม) */}
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+          <h2 className="font-bold text-gray-700 mb-3 text-sm">จัดการ To-Do List (ทำครั้งเดียว)</h2>
+          <div className="space-y-2">
+            {data.todos.map(item => (
+              <div key={item.id} className="flex justify-between items-center bg-gray-50 border border-gray-100 p-2 rounded-lg text-sm mb-2">
+                <div className="flex flex-col flex-1 truncate pr-2">
+                  <span className="text-[10px] font-bold text-gray-400">{item.date} {item.start ? `| ${item.start}${item.end ? `-${item.end}` : ''}` : ''}</span>
+                  <span className={`truncate text-gray-600 ${item.completed ? 'line-through text-gray-400' : ''}`}>{item.text}</span>
+                </div>
+                <button onClick={() => {
+                    deleteItem(item.id, 'todos');
+                    google.script.run.deleteTodoFromSheet(item.id); 
+                  }} className="text-red-400 p-1.5 bg-red-50 rounded-md hover:bg-red-100 shrink-0">
+                  <Icon name="delete" className="text-[16px]" />
+                </button>
+              </div>
+            ))}
+            {data.todos.length === 0 && <p className="text-xs text-center text-gray-400 py-2">ไม่มีรายการ To-do</p>}
+          </div>
+        </div>
+
+        {/* 5. จัดการเป้าหมายรายปี (คงเดิม) */}
         <div className="bg-gradient-to-br from-[#f2e8d9] to-[#e8decb] p-4 rounded-2xl shadow-sm border border-[#e2d5c0]">
           <h2 className="flex items-center font-bold text-[#6a5542] mb-3 text-sm">
             <Icon name="track_changes" className="text-[16px] mr-2" /> จัดการเป้าหมายรายปี
@@ -63,13 +181,8 @@
               onClick={() => { 
                 if(newGoalText.trim()) { 
                   const newGoal = { id: 'g' + Date.now(), text: newGoalText.trim(), completed: false };
-                  
-                  // 1. อัปเดต UI ทันที (Optimistic Update)
                   setData(prev => ({ ...prev, goals: [...prev.goals, newGoal] })); 
-                  
-                  // 2. ส่งข้อมูลไปบันทึกใน Google Sheet
                   google.script.run.saveGoalToSheet(newGoal);
-
                   setNewGoalText(''); 
                 } 
               }} 
@@ -84,16 +197,13 @@
               .sort((a, b) => (a.completed === b.completed ? 0 : a.completed ? 1 : -1))
               .map(goal => (
                 <div key={goal.id} className="flex justify-between items-center bg-white/60 p-2.5 rounded-xl border border-white/50 text-sm">
-                  {/* คลิกที่ข้อความเพื่อสลับสถานะ Pending/Complete */}
                   <span 
                     onClick={() => {
                        const newStatus = !goal.completed;
-                       // อัปเดต UI
                        setData(prev => ({
                          ...prev, 
                          goals: prev.goals.map(g => g.id === goal.id ? {...g, completed: newStatus} : g)
                        }));
-                       // อัปเดตใน Sheet
                        google.script.run.updateGoalStatusInSheet(goal.id, newStatus);
                     }}
                     className={`flex-1 cursor-pointer select-none ${goal.completed ? 'line-through text-[#6a5542]/50' : 'text-[#6a5542] font-medium'}`}
@@ -103,9 +213,7 @@
                   
                   <button 
                     onClick={() => {
-                      // ลบออกจาก UI
                       setData(prev => ({...prev, goals: prev.goals.filter(g => g.id !== goal.id)}));
-                      // ลบออกจาก Sheet
                       google.script.run.deleteGoalFromSheet(goal.id);
                     }} 
                     className="text-red-400 p-1.5 bg-red-50 rounded-md hover:bg-red-100 shrink-0 ml-2"
