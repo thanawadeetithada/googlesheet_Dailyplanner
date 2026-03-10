@@ -1,0 +1,42 @@
+<script type="text/babel">
+  window.FinanceTab = (props) => {
+    const { 
+      data, setData, financeForm, setFinanceForm, 
+      totalIncome, totalExpense, currentBalance, currentMonthTx 
+    } = props;
+    
+    return (
+      <div className="space-y-4">
+        <div className="bg-gradient-to-r from-[#dcf0d5] to-[#cbe6c1] p-4 rounded-3xl shadow-sm border border-[#b2d6a5]">
+          <h3 className="font-bold text-[#4a6b41] text-sm mb-3">สรุปประจำเดือน</h3>
+          <div className="space-y-2">
+            <div className="flex justify-between bg-white/60 p-2 rounded-xl"><span className="text-xs">รายรับทั้งหมด</span><span className="text-sm font-bold text-green-600">฿ {totalIncome.toLocaleString()}</span></div>
+            <div className="flex justify-between bg-white/60 p-2 rounded-xl"><span className="text-xs">รายจ่ายทั้งหมด</span><span className="text-sm font-bold text-red-500">฿ {totalExpense.toLocaleString()}</span></div>
+            <div className="flex justify-between bg-[#4a6b41] text-white p-3 rounded-xl mt-2 shadow-sm"><span className="text-sm font-bold">ยอดคงเหลือ</span><span className="text-lg font-bold">฿ {currentBalance.toLocaleString()}</span></div>
+          </div>
+        </div>
+        <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
+          <h3 className="font-bold text-[#8b7355] text-sm mb-4">เพิ่มรายการ</h3>
+          <div className="space-y-3">
+            <input type="date" value={financeForm.date} onChange={e => setFinanceForm({...financeForm, date: e.target.value})} className="w-full bg-gray-50 p-2.5 rounded-xl text-sm outline-none" />
+            <div className="flex gap-2">
+              <button onClick={() => setFinanceForm({...financeForm, type: 'income'})} className={`flex-1 py-2 rounded-xl text-xs font-bold ${financeForm.type === 'income' ? 'bg-green-100 text-green-700' : 'bg-gray-50 text-gray-400'}`}>รายรับ</button>
+              <button onClick={() => setFinanceForm({...financeForm, type: 'expense'})} className={`flex-1 py-2 rounded-xl text-xs font-bold ${financeForm.type === 'expense' ? 'bg-red-100 text-red-600' : 'bg-gray-50 text-gray-400'}`}>รายจ่าย</button>
+            </div>
+            <input type="text" placeholder="หมวดหมู่ เช่น อาหาร..." value={financeForm.category} onChange={e => setFinanceForm({...financeForm, category: e.target.value})} className="w-full bg-gray-50 p-2.5 rounded-xl text-sm outline-none" />
+            <input type="number" placeholder="จำนวนเงิน" value={financeForm.amount} onChange={e => setFinanceForm({...financeForm, amount: e.target.value})} className="w-full bg-gray-50 p-2.5 rounded-xl text-sm outline-none" />
+            <button onClick={() => {
+              if(financeForm.category && financeForm.amount) {
+                setData(prev => ({...prev, transactions: [{ id: Date.now().toString(), date: financeForm.date, type: financeForm.type, category: financeForm.category, amount: Number(financeForm.amount) }, ...prev.transactions]}));
+                setFinanceForm({...financeForm, category: '', amount: ''});
+              }
+            }} className="w-full bg-[#8b7355] text-white font-bold py-3 rounded-xl shadow-md">บันทึกรายการ</button>
+          </div>
+        </div>
+        <div className="bg-white rounded-3xl shadow-sm p-4"><h3 className="font-bold text-gray-700 text-sm mb-2">รายการเดือนนี้</h3>
+          {currentMonthTx.map(tx => <div key={tx.id} className="flex justify-between border-b py-2 text-xs"><span className="text-gray-500">{tx.date.slice(5)} {tx.category}</span><span className={`font-bold ${tx.type === 'income' ? 'text-green-600' : 'text-red-500'}`}>{tx.type === 'income' ? '+' : '-'} {tx.amount.toLocaleString()}</span></div>)}
+        </div>
+      </div>
+    );
+  };
+</script>
